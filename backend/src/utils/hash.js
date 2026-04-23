@@ -21,4 +21,10 @@ function buildContentHash({ amountPaise, category, description, date }) {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
-module.exports = { buildContentHash };
+/** No time bucket — used after updates to index semantically identical rows for conflict checks. */
+function buildStableContentHash({ amountPaise, category, description, date }) {
+  const raw = `${amountPaise}|${category.trim().toLowerCase()}|${description.trim().toLowerCase()}|${date}`;
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+module.exports = { buildContentHash, buildStableContentHash };

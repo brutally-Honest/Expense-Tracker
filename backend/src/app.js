@@ -26,7 +26,7 @@ app.use(
         callback(new Error(`CORS: origin ${origin} not allowed`));
       }
     },
-    methods: ['GET', 'POST', 'PUT'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type'],
   })
 );

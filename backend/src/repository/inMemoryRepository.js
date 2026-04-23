@@ -1,3 +1,5 @@
+const { buildStableContentHash } = require('../utils/hash');
+
 /**
  * In-Memory Expense Repository
  *
@@ -8,9 +10,16 @@
  * Interface contract:
  *   create(expense)          → expense
  *   findAll({ category, sort }) → expense[]
+ *   findPage({ category, sort, page, limit }) → { items, total, totalAmountPaise, page, limit, totalPages }
+ *   findById(id)             → expense | undefined
+ *   updateById(id, fields)   → { ok, expense? , code? }
+ *   deleteById(id)           → boolean
  *   findByHash(hash)         → expense | undefined
  *   findOrCreateByHash(hash, expense) → { expense, created }
  */
+
+const DEFAULT_PAGE_LIMIT = 10;
+const MAX_PAGE_LIMIT = 100;
 
 /** @type {Map<string, Object>} id → expense */
 const store = new Map();
@@ -75,6 +84,99 @@ const inMemoryRepository = {
     });
 
     return results;
+  },
+
+  /**
+   * Paginated slice of filtered/sorted expenses + aggregate counts for the full filtered set.
+   * @param {number} [opts.page=1]  1-based page index
+   * @param {number} [opts.limit=10] page size (clamped 1..100)
+   */
+  findPage({ category, sort, page = 1, limit = DEFAULT_PAGE_LIMIT } = {}) {
+    const all = this.findAll({ category, sort });
+    const total = all.length;
+    const totalAmountPaise = all.reduce((sum, e) => sum + e.amountPaise, 0);
+
+    let safeLimit = Number(limit);
+    if (!Number.isFinite(safeLimit)) safeLimit = DEFAULT_PAGE_LIMIT;
+    safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, Math.floor(safeLimit)));
+
+    let safePage = Number(page);
+    if (!Number.isFinite(safePage)) safePage = 1;
+    safePage = Math.max(1, Math.floor(safePage));
+
+    const totalPages = total === 0 ? 0 : Math.ceil(total / safeLimit);
+    if (totalPages > 0 && safePage > totalPages) {
+      safePage = totalPages;
+    }
+
+    const offset = (safePage - 1) * safeLimit;
+    const items = all.slice(offset, offset + safeLimit);
+
+    return {
+      items,
+      total,
+      totalAmountPaise,
+      page: safePage,
+      limit: safeLimit,
+      totalPages,
+    };
+  },
+
+  findById(id) {
+    return store.get(id);
+  },
+
+  /**
+   * Replace expense fields; updates hash index. Fails if another row already has identical content.
+   * @returns {{ ok: true, expense: object } | { ok: false, code: 'NOT_FOUND' | 'DUPLICATE' }}
+   */
+  updateById(id, { amountPaise, category, description, date }) {
+    const existing = store.get(id);
+    if (!existing) return { ok: false, code: 'NOT_FOUND' };
+
+    const categoryNorm = category;
+    const descTrim = description.trim();
+    const newHash = buildStableContentHash({
+      amountPaise,
+      category: categoryNorm,
+      description: descTrim,
+      date,
+    });
+
+    const mappedId = hashIndex.get(newHash);
+    if (mappedId && mappedId !== id) {
+      return { ok: false, code: 'DUPLICATE' };
+    }
+
+    for (const other of store.values()) {
+      if (other.id === id) continue;
+      if (
+        other.amountPaise === amountPaise &&
+        other.category === categoryNorm &&
+        other.description === descTrim &&
+        other.date === date
+      ) {
+        return { ok: false, code: 'DUPLICATE' };
+      }
+    }
+
+    hashIndex.delete(existing.contentHash);
+    existing.amountPaise = amountPaise;
+    existing.category = categoryNorm;
+    existing.description = descTrim;
+    existing.date = date;
+    existing.contentHash = newHash;
+    hashIndex.set(newHash, id);
+
+    return { ok: true, expense: existing };
+  },
+
+  deleteById(id) {
+    const e = store.get(id);
+    if (!e) return false;
+    hashIndex.delete(e.contentHash);
+    store.delete(id);
+    return true;
   },
 
   /**

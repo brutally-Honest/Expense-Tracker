@@ -118,6 +118,105 @@ describe('GET /api/expenses', () => {
     const res = await request(app).get('/api/expenses').query({ sort: 'date_asc' });
     expect(res.body.data.map((e) => e.date)).toEqual(['2024-01-05', '2024-01-10', '2024-02-01']);
   });
+
+  it('returns pagination meta and totalAmount for the full filtered set', async () => {
+    await seed();
+    const res = await request(app).get('/api/expenses').query({ limit: 2, page: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.meta).toMatchObject({
+      page: 1,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+      totalAmount: '60.00',
+    });
+  });
+
+  it('clamps page when past the last page', async () => {
+    await seed();
+    const res = await request(app).get('/api/expenses').query({ page: 99, limit: 2 });
+    expect(res.status).toBe(200);
+    expect(res.body.meta.page).toBe(2);
+    expect(res.body.data).toHaveLength(1);
+  });
+
+  it('returns 422 for invalid page', async () => {
+    const res = await request(app).get('/api/expenses').query({ page: 0 });
+    expect(res.status).toBe(422);
+  });
+});
+
+describe('PATCH /api/expenses/:id', () => {
+  beforeEach(() => {
+    repo.resetForTests();
+  });
+
+  it('updates an expense (200)', async () => {
+    const create = await request(app).post('/api/expenses').send(validExpense);
+    const id = create.body.data.id;
+    const res = await request(app)
+      .patch(`/api/expenses/${id}`)
+      .send({ ...validExpense, amount: '99.00', description: 'Updated' });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      id,
+      amount: '99.00',
+      description: 'Updated',
+    });
+  });
+
+  it('returns 404 for unknown id', async () => {
+    const res = await request(app)
+      .patch('/api/expenses/00000000-0000-4000-8000-000000000000')
+      .send(validExpense);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 409 when another row already has the same content', async () => {
+    const a = await request(app).post('/api/expenses').send({
+      amount: '10',
+      category: 'Food',
+      description: 'Keep',
+      date: '2024-01-10',
+    });
+    const b = await request(app).post('/api/expenses').send({
+      amount: '20',
+      category: 'Transport',
+      description: 'Change me',
+      date: '2024-02-01',
+    });
+    const res = await request(app)
+      .patch(`/api/expenses/${b.body.data.id}`)
+      .send({
+        amount: '10',
+        category: 'Food',
+        description: 'Keep',
+        date: '2024-01-10',
+      });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('DUPLICATE_EXPENSE');
+  });
+});
+
+describe('DELETE /api/expenses/:id', () => {
+  beforeEach(() => {
+    repo.resetForTests();
+  });
+
+  it('deletes an expense (204)', async () => {
+    const create = await request(app).post('/api/expenses').send(validExpense);
+    const id = create.body.data.id;
+    const res = await request(app).delete(`/api/expenses/${id}`);
+    expect(res.status).toBe(204);
+    const list = await request(app).get('/api/expenses');
+    expect(list.body.meta.total).toBe(0);
+  });
+
+  it('returns 404 when missing', async () => {
+    const res = await request(app).delete('/api/expenses/00000000-0000-4000-8000-000000000000');
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('GET /api/categories', () => {
