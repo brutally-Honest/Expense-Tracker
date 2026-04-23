@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useExpenses } from './hooks/useExpenses';
 import { ExpenseForm } from './components/ExpenseForm';
 import { FilterBar } from './components/FilterBar';
@@ -25,10 +25,39 @@ export default function App() {
     metaLoading,
     hasPendingDraft,
     submitExpense,
+    updateExpense,
+    deleteExpense,
     setFilter,
+    setPage,
+    setLimit,
   } = useExpenses();
-  const { expenses, filters, ui } = state;
+  const { expenses, filters, ui, listMeta, pagination } = state;
   const online = useOnline();
+
+  const [editingExpense, setEditingExpense] = useState(null);
+
+  const handleCancelEdit = useCallback(() => setEditingExpense(null), []);
+
+  const handleEdit = useCallback((row) => {
+    setEditingExpense(row);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleUpdate = useCallback(
+    (id, fields) => updateExpense(id, fields),
+    [updateExpense]
+  );
+
+  const handleDeleteExpense = useCallback(
+    async (id) => {
+      const result = await deleteExpense(id);
+      if (result?.ok) {
+        setEditingExpense((prev) => (prev?.id === id ? null : prev));
+      }
+      return result;
+    },
+    [deleteExpense]
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -58,6 +87,9 @@ export default function App() {
             categories={categories}
             onSubmit={submitExpense}
             submitting={ui.submitting}
+            editingExpense={editingExpense}
+            onUpdate={handleUpdate}
+            onCancelEdit={handleCancelEdit}
           />
         </div>
 
@@ -96,13 +128,36 @@ export default function App() {
               expenses={expenses}
               loading={ui.loading}
               categories={categories}
+              onEdit={handleEdit}
+              onDelete={handleDeleteExpense}
+              disabled={!online || !!ui.submitting}
+            />
+
+            <PaginationControls
+              listMeta={listMeta}
+              pagination={pagination}
+              disabled={ui.loading || !online}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
             />
 
             <div className="pt-4 border-t border-gray-100">
-              <p className="text-xs text-gray-500 mb-1">Current list (filters applied)</p>
-              <div className="flex items-baseline justify-between">
+              <p className="text-xs text-gray-500 mb-1">
+                Filtered total (all matching entries, not just this page)
+              </p>
+              <div className="flex items-baseline justify-between flex-wrap gap-2">
                 <span className="text-sm text-gray-600">
-                  {expenses.length} {expenses.length === 1 ? 'entry' : 'entries'}
+                  {listMeta.total === 0 ? (
+                    'No matching entries'
+                  ) : (
+                    <>
+                      Showing{' '}
+                      {(pagination.page - 1) * pagination.limit + 1}
+                      –
+                      {Math.min(pagination.page * pagination.limit, listMeta.total)} of {listMeta.total}{' '}
+                      {listMeta.total === 1 ? 'entry' : 'entries'}
+                    </>
+                  )}
                 </span>
                 <div>
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wider mr-2">Total</span>
@@ -127,6 +182,63 @@ export default function App() {
  * useOnline — subscribes to browser online/offline events.
  * Returns false the moment connectivity is lost.
  */
+function PaginationControls({
+  listMeta,
+  pagination,
+  disabled,
+  onPageChange,
+  onLimitChange,
+}) {
+  const { total, totalPages } = listMeta;
+  const { page, limit } = pagination;
+  const canPrev = total > 0 && page > 1;
+  const canNext = total > 0 && page < totalPages;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <label htmlFor="page-size" className="font-medium text-gray-500">
+          Rows per page
+        </label>
+        <select
+          id="page-size"
+          value={limit}
+          disabled={disabled}
+          onChange={(e) => onLimitChange(Number(e.target.value))}
+          className="border border-gray-300 rounded px-2 py-1 text-sm bg-white disabled:opacity-50"
+        >
+          {[10, 20, 50].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={disabled || !canPrev}
+          onClick={() => onPageChange(page - 1)}
+          className="text-xs font-medium px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+        <span className="text-xs text-gray-500 tabular-nums">
+          Page {total === 0 ? 0 : page} / {total === 0 ? 0 : totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={disabled || !canNext}
+          onClick={() => onPageChange(page + 1)}
+          className="text-xs font-medium px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function useOnline() {
   const [online, setOnline] = useState(navigator.onLine);
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FILTER_SELECT_STYLE, filterSelectClassName } from './FilterBar';
 
 /** Mirrors backend `MAX_RUPEES_PER_EXPENSE` / `parseAmountInputToPaise` rules for client-side gating. */
@@ -88,19 +88,48 @@ const empty = (defaultCategory) => ({
  */
 const initialTouched = () => ({ amount: false, date: false, description: false });
 
-export function ExpenseForm({ categories = [], onSubmit, submitting }) {
+export function ExpenseForm({
+  categories = [],
+  onSubmit,
+  submitting,
+  editingExpense = null,
+  onUpdate,
+  onCancelEdit,
+}) {
   const [fields, setFields] = useState(() => empty(''));
   const [touched, setTouched] = useState(initialTouched);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const prevEditingIdRef = useRef(undefined);
 
   const defaultCategory = categories[0] ?? '';
 
   useEffect(() => {
-    if (!categories.length) return;
+    if (!editingExpense) return;
+    setFields({
+      amount: editingExpense.amount,
+      category: editingExpense.category,
+      description: editingExpense.description,
+      date: editingExpense.date,
+    });
+    setTouched(initialTouched());
+  }, [editingExpense?.id]);
+
+  useEffect(() => {
+    if (!categories.length || editingExpense) return;
     setFields((f) => ({
       ...f,
       category: categories.includes(f.category) ? f.category : defaultCategory,
     }));
-  }, [categories, defaultCategory]);
+  }, [categories, defaultCategory, editingExpense]);
+
+  useEffect(() => {
+    const id = editingExpense?.id;
+    if (prevEditingIdRef.current && !id) {
+      setFields(empty(defaultCategory));
+      setTouched(initialTouched());
+    }
+    prevEditingIdRef.current = id;
+  }, [editingExpense, defaultCategory]);
 
   const submitErrors = useMemo(
     () => getSubmitErrors(fields, { categories }),
@@ -129,6 +158,17 @@ export function ExpenseForm({ categories = [], onSubmit, submitting }) {
     e.preventDefault();
     if (submitBlocked) return;
 
+    if (editingExpense && onUpdate) {
+      setSaveBusy(true);
+      try {
+        const result = await onUpdate(editingExpense.id, fields);
+        if (result?.ok && onCancelEdit) onCancelEdit();
+      } finally {
+        setSaveBusy(false);
+      }
+      return;
+    }
+
     const result = await onSubmit(fields);
     if (result?.ok) {
       setFields(empty(defaultCategory));
@@ -136,9 +176,24 @@ export function ExpenseForm({ categories = [], onSubmit, submitting }) {
     }
   }
 
+  const formWorking = submitting || saveBusy;
+  const title = editingExpense ? 'Edit expense' : 'Add expense';
+
   return (
     <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">Add Expense</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">{title}</h2>
+        {editingExpense && onCancelEdit ? (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            disabled={formWorking}
+            className="text-xs font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         {/* Amount */}
@@ -229,10 +284,10 @@ export function ExpenseForm({ categories = [], onSubmit, submitting }) {
 
       <button
         type="submit"
-        disabled={submitting || submitBlocked}
+        disabled={formWorking || submitBlocked}
         className="w-full bg-gray-900 text-white text-sm font-medium rounded py-2.5 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
-        {submitting ? 'Saving…' : 'Add Expense'}
+        {formWorking ? 'Saving…' : editingExpense ? 'Save changes' : 'Add Expense'}
       </button>
     </form>
   );

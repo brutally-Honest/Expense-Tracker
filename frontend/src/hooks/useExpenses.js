@@ -49,17 +49,26 @@ export function useExpenses() {
   const filtersRef = useRef(state.filters);
   filtersRef.current = state.filters;
 
+  const paginationRef = useRef(state.pagination);
+  paginationRef.current = state.pagination;
+
   // Avoid duplicate mount replay (e.g. React StrictMode double-invoke)
   const draftReplayed = useRef(false);
   const isFirstMetaFetch = useRef(true);
 
   // ── Fetch ───────────────────────────────────────────────────────────────
 
-  const fetchExpenses = useCallback(async (filters) => {
+  const fetchExpenses = useCallback(async () => {
     dispatch({ type: 'FETCH_START' });
     try {
-      const { data } = await api.getExpenses(filters);
-      dispatch({ type: 'FETCH_SUCCESS', payload: data });
+      const filters = filtersRef.current;
+      const { page, limit } = paginationRef.current;
+      const { data, meta } = await api.getExpenses({
+        ...filters,
+        page,
+        limit,
+      });
+      dispatch({ type: 'FETCH_SUCCESS', payload: { data, meta } });
     } catch (err) {
       dispatch({ type: 'FETCH_ERROR', payload: err.message });
       toast.error(err.message);
@@ -85,10 +94,16 @@ export function useExpenses() {
     }
   }, []);
 
-  // Re-fetch whenever filters change
+  // Re-fetch whenever filters or pagination change (primitive deps — avoid object identity churn)
   useEffect(() => {
-    fetchExpenses(state.filters);
-  }, [state.filters, fetchExpenses]);
+    void fetchExpenses();
+  }, [
+    state.filters.category,
+    state.filters.sort,
+    state.pagination.page,
+    state.pagination.limit,
+    fetchExpenses,
+  ]);
 
   useEffect(() => {
     fetchCategoriesAndSummary();
@@ -121,7 +136,7 @@ export function useExpenses() {
       safeStorageRemove(DRAFT_KEY);
       setHasPendingDraft(false);
       toast.success('Queued expense saved');
-      await fetchExpenses(filtersRef.current);
+      await fetchExpenses();
       await fetchCategoriesAndSummary();
     } catch (err) {
       const msg = err?.message || 'Could not save queued expense';
@@ -138,7 +153,7 @@ export function useExpenses() {
 
   useEffect(() => {
     function handleOnline() {
-      void fetchExpenses(filtersRef.current);
+      void fetchExpenses();
       void fetchCategoriesAndSummary();
       void replayPendingDraft();
     }
@@ -164,7 +179,7 @@ export function useExpenses() {
         setHasPendingDraft(false);
         dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
         toast.success('Expense saved');
-        await fetchExpenses(state.filters);
+        await fetchExpenses();
         await fetchCategoriesAndSummary();
         return { ok: true };
       } catch (err) {
@@ -173,7 +188,41 @@ export function useExpenses() {
         return { ok: false, message: err.message };
       }
     },
-    [state.filters, fetchExpenses, fetchCategoriesAndSummary]
+    [fetchExpenses, fetchCategoriesAndSummary]
+  );
+
+  const updateExpense = useCallback(
+    async (id, formData) => {
+      try {
+        await api.updateExpense(id, formData);
+        toast.success('Expense updated');
+        await fetchExpenses();
+        await fetchCategoriesAndSummary();
+        return { ok: true };
+      } catch (err) {
+        const msg = err?.message || 'Could not update expense';
+        toast.error(msg);
+        return { ok: false, message: msg, code: err?.code };
+      }
+    },
+    [fetchExpenses, fetchCategoriesAndSummary]
+  );
+
+  const deleteExpense = useCallback(
+    async (id) => {
+      try {
+        await api.deleteExpense(id);
+        toast.success('Expense deleted');
+        await fetchExpenses();
+        await fetchCategoriesAndSummary();
+        return { ok: true };
+      } catch (err) {
+        const msg = err?.message || 'Could not delete expense';
+        toast.error(msg);
+        return { ok: false, message: msg };
+      }
+    },
+    [fetchExpenses, fetchCategoriesAndSummary]
   );
 
   // ── Filters ──────────────────────────────────────────────────────────────
@@ -182,13 +231,17 @@ export function useExpenses() {
     dispatch({ type: 'SET_FILTER', key, value });
   }, []);
 
+  const setPage = useCallback((page) => {
+    dispatch({ type: 'SET_PAGE', payload: page });
+  }, []);
+
+  const setLimit = useCallback((limit) => {
+    dispatch({ type: 'SET_LIMIT', payload: limit });
+  }, []);
+
   // ── Derived ──────────────────────────────────────────────────────────────
 
-  // Total is always computed from the current list (server already filtered/sorted)
-  const total = state.expenses.reduce(
-    (sum, e) => sum + parseFloat(e.amount),
-    0
-  );
+  const total = parseFloat(state.listMeta?.totalAmount ?? '0');
 
   return {
     state,
@@ -198,6 +251,10 @@ export function useExpenses() {
     metaLoading,
     hasPendingDraft,
     submitExpense,
+    updateExpense,
+    deleteExpense,
     setFilter,
+    setPage,
+    setLimit,
   };
 }

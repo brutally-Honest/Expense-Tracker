@@ -14,6 +14,7 @@ const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api';
 
+/** Long enough for cold starts (e.g. free Render) without hanging forever. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
 async function request(path, options = {}) {
@@ -39,7 +40,17 @@ async function request(path, options = {}) {
     clearTimeout(timer);
   }
 
-  const body = await res.json();
+  const raw = await res.text();
+  let body = null;
+  if (raw) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = {};
+    }
+  } else {
+    body = {};
+  }
 
   if (!res.ok) {
     // Throw a structured error so callers can inspect code/details
@@ -65,12 +76,13 @@ export const api = {
   },
 
   /**
-   * @param {{ category?: string, sort?: string }} params
+   * @param {{ category?: string, sort?: string, page?: number, limit?: number }} params
    */
   getExpenses(params = {}) {
-    const qs = new URLSearchParams(
-      Object.fromEntries(Object.entries(params).filter(([, v]) => v))
-    ).toString();
+    const entries = Object.entries(params).filter(
+      ([, v]) => v !== undefined && v !== null && v !== ''
+    );
+    const qs = new URLSearchParams(Object.fromEntries(entries)).toString();
     return request(`/expenses${qs ? `?${qs}` : ''}`);
   },
 
@@ -81,6 +93,24 @@ export const api = {
     return request('/expenses', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * @param {string} id
+   * @param {{ amount: string, category: string, description: string, date: string }} payload
+   */
+  updateExpense(id, payload) {
+    return request(`/expenses/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** @param {string} id */
+  deleteExpense(id) {
+    return request(`/expenses/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   },
 };

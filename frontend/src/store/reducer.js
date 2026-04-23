@@ -6,21 +6,30 @@
  *
  * State shape:
  * {
- *   expenses: Expense[],          ← server-sourced, refreshed on mount and after create
- *   filters: { category, sort },  ← passed to GET /expenses as query params
- *   ui: {
- *     loading: bool,              ← GET in flight
- *     submitting: bool,           ← POST in flight
- *     error: string | null,       ← last error message
- *   }
+ *   expenses: Expense[],          ← server-sourced, paginated slice
+ *   listMeta: { page, limit, total, totalPages, totalAmount }  ← from GET /expenses
+ *   filters: { category, sort },
+ *   pagination: { page, limit },
+ *   ui: { loading, submitting, error }
  * }
  */
 
 export const initialState = {
   expenses: [],
+  listMeta: {
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+    totalAmount: '0.00',
+  },
   filters: {
     category: '',
     sort: 'date_desc',
+  },
+  pagination: {
+    page: 1,
+    limit: 10,
   },
   ui: {
     loading: false,
@@ -35,12 +44,23 @@ export function reducer(state, action) {
     case 'FETCH_START':
       return { ...state, ui: { ...state.ui, loading: true, error: null } };
 
-    case 'FETCH_SUCCESS':
+    case 'FETCH_SUCCESS': {
+      const { data, meta } = action.payload;
+      const paginationSame =
+        state.pagination.page === meta.page &&
+        state.pagination.limit === meta.limit;
       return {
         ...state,
-        expenses: action.payload,
+        expenses: data,
+        listMeta: meta,
+        // Keep same object reference when server echoes the same page/limit — avoids a
+        // useEffect([state.pagination]) loop (spread always created a new object before).
+        pagination: paginationSame
+          ? state.pagination
+          : { ...state.pagination, page: meta.page, limit: meta.limit },
         ui: { ...state.ui, loading: false },
       };
+    }
 
     case 'FETCH_ERROR':
       return {
@@ -52,19 +72,11 @@ export function reducer(state, action) {
     case 'SUBMIT_START':
       return { ...state, ui: { ...state.ui, submitting: true, error: null } };
 
-    case 'SUBMIT_SUCCESS': {
-      const activeCat = state.filters.category?.trim();
-      const matchesFilter =
-        !activeCat || action.payload.category === activeCat;
+    case 'SUBMIT_SUCCESS':
       return {
         ...state,
-        // Prepend only if it belongs in the current filtered view (fetch still reconciles)
-        expenses: matchesFilter
-          ? [action.payload, ...state.expenses]
-          : state.expenses,
         ui: { ...state.ui, submitting: false },
       };
-    }
 
     case 'SUBMIT_ERROR':
       return {
@@ -77,6 +89,19 @@ export function reducer(state, action) {
       return {
         ...state,
         filters: { ...state.filters, [action.key]: action.value },
+        pagination: { ...state.pagination, page: 1 },
+      };
+
+    case 'SET_PAGE':
+      return {
+        ...state,
+        pagination: { ...state.pagination, page: action.payload },
+      };
+
+    case 'SET_LIMIT':
+      return {
+        ...state,
+        pagination: { ...state.pagination, limit: action.payload, page: 1 },
       };
 
     default:
