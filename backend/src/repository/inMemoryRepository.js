@@ -9,6 +9,7 @@
  *   create(expense)          → expense
  *   findAll({ category, sort }) → expense[]
  *   findByHash(hash)         → expense | undefined
+ *   findOrCreateByHash(hash, expense) → { expense, created }
  */
 
 /** @type {Map<string, Object>} id → expense */
@@ -36,6 +37,20 @@ const inMemoryRepository = {
     const id = hashIndex.get(hash);
     if (!id) return undefined;
     return store.get(id);
+  },
+
+  /**
+   * Atomically insert by content hash or return the existing row (single-threaded check+set).
+   * Use this instead of findByHash + create to avoid TOCTOU duplicates under concurrent POSTs.
+   */
+  findOrCreateByHash(hash, expense) {
+    const existingId = hashIndex.get(hash);
+    if (existingId) {
+      return { expense: store.get(existingId), created: false };
+    }
+    store.set(expense.id, expense);
+    hashIndex.set(hash, expense.id);
+    return { expense, created: true };
   },
 
   /**

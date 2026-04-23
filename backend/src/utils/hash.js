@@ -10,7 +10,7 @@ const crypto = require('crypto');
  *
  * @param {Object} payload
  * @param {number} payload.amountPaise - integer paise
- * @param {string} payload.category
+ * @param {string} payload.category - already normalized (e.g. title case); hashed case-insensitively
  * @param {string} payload.description
  * @param {string} payload.date        - YYYY-MM-DD
  * @returns {string} hex hash

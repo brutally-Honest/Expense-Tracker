@@ -5,16 +5,27 @@ const { randomUUID } = require('crypto');
 const repo = require('../repository/inMemoryRepository');
 const { buildContentHash } = require('../utils/hash');
 const { handleValidationErrors } = require('../middleware/errorHandler');
-const { formatExpense } = require('../utils/helpers');
+const {
+  formatExpense,
+  normalizeCategory,
+  parseAmountInputToPaise,
+  isValidCalendarDateIso,
+} = require('../utils/helpers');
 
 const router = express.Router();
 
 // ─── Validation rules ────────────────────────────────────────────────────────
 
 const createExpenseRules = [
-  body('amount')
-    .isFloat({ gt: 0 })
-    .withMessage('Amount must be a positive number'),
+  body('amount').custom((value) => {
+    try {
+      parseAmountInputToPaise(value);
+      return true;
+    } catch (err) {
+      throw new Error(err.message);
+    }
+  }),
+  // trim() runs first so whitespace-only category fails notEmpty (express-validator v7 order)
   body('category')
     .trim()
     .notEmpty()
@@ -27,7 +38,13 @@ const createExpenseRules = [
     .isLength({ max: 500 }),
   body('date')
     .isISO8601()
-    .withMessage('Date must be a valid ISO date (YYYY-MM-DD)'),
+    .withMessage('Date must be a valid ISO date (YYYY-MM-DD)')
+    .custom((value) => {
+      if (!isValidCalendarDateIso(value)) {
+        throw new Error('Date must be a real calendar day (YYYY-MM-DD)');
+      }
+      return true;
+    }),
 ];
 
 const listExpenseRules = [
@@ -50,30 +67,33 @@ const listExpenseRules = [
 router.post('/', createExpenseRules, handleValidationErrors, (req, res) => {
   const { amount, category, description, date } = req.body;
 
-  // Convert to paise
-  const amountPaise = Math.round(parseFloat(amount) * 100);
+  const amountPaise = parseAmountInputToPaise(amount);
+  const categoryNorm = normalizeCategory(category);
 
-  const contentHash = buildContentHash({ amountPaise, category, description, date });
-
-  // Idempotency check
-  const existing = repo.findByHash(contentHash);
-  if (existing) {
-    return res.status(200).json({ data: formatExpense(existing), idempotent: true });
-  }
+  const contentHash = buildContentHash({
+    amountPaise,
+    category: categoryNorm,
+    description,
+    date,
+  });
 
   const expense = {
     id: randomUUID(),
     amountPaise,
-    category: category.trim(),
+    category: categoryNorm,
     description: description.trim(),
-    date,                         // stored as YYYY-MM-DD string
+    date,
     createdAt: new Date().toISOString(),
     contentHash,
   };
 
-  repo.create(expense);
+  const { expense: resolved, created } = repo.findOrCreateByHash(contentHash, expense);
 
-  return res.status(201).json({ data: formatExpense(expense), idempotent: false });
+  if (!created) {
+    return res.status(200).json({ data: formatExpense(resolved), idempotent: true });
+  }
+
+  return res.status(201).json({ data: formatExpense(resolved), idempotent: false });
 });
 
 /**
