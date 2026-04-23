@@ -18,7 +18,7 @@ import { ExpenseSummary } from './components/ExpenseSummary';
  *   [ExpenseSummary]
  */
 export default function App() {
-  const { state, total, submitExpense, setFilter, clearError } = useExpenses();
+  const { state, total, submitExpense, setFilter } = useExpenses();
   const { expenses, filters, ui } = state;
   const online = useOnline();
 
@@ -54,22 +54,6 @@ export default function App() {
             </h2>
             <FilterBar filters={filters} onFilterChange={setFilter} />
           </div>
-
-          {ui.error ? (
-            <div
-              className="flex items-start justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-              role="alert"
-            >
-              <span>{ui.error}</span>
-              <button
-                type="button"
-                onClick={clearError}
-                className="shrink-0 text-red-700 underline-offset-2 hover:underline text-xs font-medium"
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : null}
 
           <ExpenseTable expenses={expenses} loading={ui.loading} />
 

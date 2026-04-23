@@ -5,6 +5,31 @@ import { reducer, initialState } from '../store/reducer';
 
 const DRAFT_KEY = 'expense_draft_queue';
 
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
 /**
  * useExpenses — the brain of the app.
  *
@@ -53,14 +78,14 @@ export function useExpenses() {
     if (draftReplayed.current) return;
     draftReplayed.current = true;
 
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = safeStorageGet(DRAFT_KEY);
     if (!raw) return;
 
     let draft;
     try {
       draft = JSON.parse(raw);
     } catch {
-      localStorage.removeItem(DRAFT_KEY);
+      safeStorageRemove(DRAFT_KEY);
       return;
     }
 
@@ -69,12 +94,12 @@ export function useExpenses() {
       .createExpense(draft)
       .then(({ data }) => {
         dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
-        localStorage.removeItem(DRAFT_KEY);
+        safeStorageRemove(DRAFT_KEY);
         fetchExpenses(state.filters);
       })
       .catch(() => {
         // If replay fails, remove draft to avoid infinite retry loop
-        localStorage.removeItem(DRAFT_KEY);
+        safeStorageRemove(DRAFT_KEY);
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -91,11 +116,11 @@ export function useExpenses() {
   const submitExpense = useCallback(
     async (formData) => {
       dispatch({ type: 'SUBMIT_START' });
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
+      safeStorageSet(DRAFT_KEY, JSON.stringify(formData));
 
       try {
         const { data } = await api.createExpense(formData);
-        localStorage.removeItem(DRAFT_KEY);
+        safeStorageRemove(DRAFT_KEY);
         dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
         toast.success('Expense saved');
         // Re-fetch to get server-authoritative list (correct order, no dups)
@@ -124,15 +149,10 @@ export function useExpenses() {
     0
   );
 
-  const clearError = useCallback(() => {
-    dispatch({ type: 'CLEAR_ERROR' });
-  }, []);
-
   return {
     state,
     total,
     submitExpense,
     setFilter,
-    clearError,
   };
 }

@@ -52,13 +52,19 @@ export function reducer(state, action) {
     case 'SUBMIT_START':
       return { ...state, ui: { ...state.ui, submitting: true, error: null } };
 
-    case 'SUBMIT_SUCCESS':
+    case 'SUBMIT_SUCCESS': {
+      const activeCat = state.filters.category?.trim();
+      const matchesFilter =
+        !activeCat || action.payload.category === activeCat;
       return {
         ...state,
-        // Prepend optimistically; will be reconciled on next fetch
-        expenses: [action.payload, ...state.expenses],
+        // Prepend only if it belongs in the current filtered view (fetch still reconciles)
+        expenses: matchesFilter
+          ? [action.payload, ...state.expenses]
+          : state.expenses,
         ui: { ...state.ui, submitting: false },
       };
+    }
 
     case 'SUBMIT_ERROR':
       return {
@@ -72,9 +78,6 @@ export function reducer(state, action) {
         ...state,
         filters: { ...state.filters, [action.key]: action.value },
       };
-
-    case 'CLEAR_ERROR':
-      return { ...state, ui: { ...state.ui, error: null } };
 
     default:
       return state;
