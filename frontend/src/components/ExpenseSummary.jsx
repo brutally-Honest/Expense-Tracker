@@ -24,7 +24,33 @@ export function ExpenseSummary({ byCategory = [], summaryLoading, categories = [
       </h2>
       <p className="text-xs text-gray-500 mb-4">Totals across all expenses, by category</p>
       {summaryLoading ? (
-        <p className="text-sm text-gray-500">Loading summary…</p>
+        <div className="overflow-x-auto rounded-lg border border-gray-200 animate-pulse">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-2"><div className="h-3 w-16 bg-gray-200 rounded" /></th>
+                <th className="px-3 py-2 text-right"><div className="h-3 w-6 bg-gray-200 rounded ml-auto" /></th>
+                <th className="px-3 py-2 text-right"><div className="h-3 w-14 bg-gray-200 rounded ml-auto" /></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[72, 52, 64].map((w, i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  <td className="px-3 py-2"><div className={`h-5 w-${w === 72 ? '[72px]' : w === 52 ? '[52px]' : '[64px]'} bg-gray-200 rounded-md`} /></td>
+                  <td className="px-3 py-2"><div className="h-3 w-4 bg-gray-200 rounded ml-auto" /></td>
+                  <td className="px-3 py-2"><div className="h-3 w-16 bg-gray-200 rounded ml-auto" /></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50">
+                <th className="px-3 py-2"><div className="h-3 w-24 bg-gray-200 rounded" /></th>
+                <th className="px-3 py-2"><div className="h-3 w-4 bg-gray-200 rounded ml-auto" /></th>
+                <th className="px-3 py-2"><div className="h-3 w-16 bg-gray-200 rounded ml-auto" /></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       ) : byCategory.length === 0 ? (
         <p className="text-sm text-gray-500">No expenses yet</p>
       ) : (
