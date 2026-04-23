@@ -1,4 +1,5 @@
 import { useReducer, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { api } from '../api';
 import { reducer, initialState } from '../store/reducer';
 
@@ -31,6 +32,7 @@ export function useExpenses() {
       dispatch({ type: 'FETCH_SUCCESS', payload: data });
     } catch (err) {
       dispatch({ type: 'FETCH_ERROR', payload: err.message });
+      toast.error(err.message);
     }
   }, []);
 
@@ -95,11 +97,13 @@ export function useExpenses() {
         const { data } = await api.createExpense(formData);
         localStorage.removeItem(DRAFT_KEY);
         dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
+        toast.success('Expense saved');
         // Re-fetch to get server-authoritative list (correct order, no dups)
         fetchExpenses(state.filters);
         return { ok: true };
       } catch (err) {
         dispatch({ type: 'SUBMIT_ERROR', payload: err.message });
+        toast.error(err.message);
         return { ok: false, message: err.message };
       }
     },
@@ -110,10 +114,6 @@ export function useExpenses() {
 
   const setFilter = useCallback((key, value) => {
     dispatch({ type: 'SET_FILTER', key, value });
-  }, []);
-
-  const clearError = useCallback(() => {
-    dispatch({ type: 'CLEAR_ERROR' });
   }, []);
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -129,6 +129,5 @@ export function useExpenses() {
     total,
     submitExpense,
     setFilter,
-    clearError,
   };
 }

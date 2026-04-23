@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 const CATEGORIES = ['Food', 'Transport', 'Utilities', 'Shopping', 'Health', 'Entertainment', 'Other'];
 
@@ -17,25 +18,21 @@ const empty = () => ({
  *
  * Handles:
  * - Disabling submit while in-flight (prevents double-submit)
- * - Showing inline error from parent
  * - Resetting form on success
+ * - Validation errors via sonner toast
  */
-export function ExpenseForm({ onSubmit, submitting, error }) {
+export function ExpenseForm({ onSubmit, submitting }) {
   const [fields, setFields] = useState(empty);
-  const [localError, setLocalError] = useState(null);
-
   function set(key, value) {
     setFields((f) => ({ ...f, [key]: value }));
-    setLocalError(null);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setLocalError(null);
 
     const amount = parseFloat(fields.amount);
-    if (isNaN(amount) || amount <= 0) {
-      setLocalError('Amount must be a positive number');
+    if (Number.isNaN(amount) || amount <= 0) {
+      toast.error('Amount must be a positive number');
       return;
     }
 
@@ -45,17 +42,9 @@ export function ExpenseForm({ onSubmit, submitting, error }) {
     }
   }
 
-  const displayError = localError || error;
-
   return (
     <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">Add Expense</h2>
-
-      {displayError && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-          {displayError}
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         {/* Amount */}

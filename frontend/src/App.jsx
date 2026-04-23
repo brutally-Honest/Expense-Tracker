@@ -18,7 +18,7 @@ import { ExpenseSummary } from './components/ExpenseSummary';
  *   [ExpenseSummary]
  */
 export default function App() {
-  const { state, total, submitExpense, setFilter, clearError } = useExpenses();
+  const { state, total, submitExpense, setFilter } = useExpenses();
   const { expenses, filters, ui } = state;
   const online = useOnline();
 
@@ -43,11 +43,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[360px_1fr] gap-6 items-start">
         {/* Left: form */}
         <div>
-          <ExpenseForm
-            onSubmit={submitExpense}
-            submitting={ui.submitting}
-            error={ui.submitting ? null : ui.error}
-          />
+          <ExpenseForm onSubmit={submitExpense} submitting={ui.submitting} />
         </div>
 
         {/* Right: list */}
@@ -58,19 +54,6 @@ export default function App() {
             </h2>
             <FilterBar filters={filters} onFilterChange={setFilter} />
           </div>
-
-          {/* Fetch error (not a submit error) */}
-          {ui.error && !ui.submitting && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 flex justify-between items-center">
-              <span>{ui.error}</span>
-              <button
-                onClick={clearError}
-                className="ml-4 text-red-400 hover:text-red-600 text-xs underline"
-              >
-                dismiss
-              </button>
-            </div>
-          )}
 
           <ExpenseTable expenses={expenses} loading={ui.loading} />
 

@@ -1,3 +1,17 @@
+const CATEGORY_BADGE = {
+  Food: 'bg-amber-100 text-amber-900 ring-1 ring-amber-200/80',
+  Transport: 'bg-sky-100 text-sky-900 ring-1 ring-sky-200/80',
+  Utilities: 'bg-violet-100 text-violet-900 ring-1 ring-violet-200/80',
+  Shopping: 'bg-rose-100 text-rose-900 ring-1 ring-rose-200/80',
+  Health: 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80',
+  Entertainment: 'bg-purple-100 text-purple-900 ring-1 ring-purple-200/80',
+  Other: 'bg-slate-100 text-slate-800 ring-1 ring-slate-200/80',
+};
+
+function categoryBadgeClass(category) {
+  return CATEGORY_BADGE[category] ?? 'bg-gray-100 text-gray-700 ring-1 ring-gray-200/80';
+}
+
 /**
  * ExpenseTable
  *
@@ -39,7 +53,9 @@ export function ExpenseTable({ expenses, loading }) {
                 {formatDate(expense.date)}
               </td>
               <td className="py-3 pr-4">
-                <span className="inline-block bg-gray-100 text-gray-600 text-xs rounded px-2 py-0.5 font-medium">
+                <span
+                  className={`inline-block text-xs rounded-md px-2 py-0.5 font-medium ${categoryBadgeClass(expense.category)}`}
+                >
                   {expense.category}
                 </span>
               </td>
