@@ -1,7 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FILTER_SELECT_STYLE, filterSelectClassName } from './FilterBar';
-
-const CATEGORIES = ['Food', 'Transport', 'Utilities', 'Shopping', 'Health', 'Entertainment', 'Other'];
 
 /** Mirrors backend `MAX_RUPEES_PER_EXPENSE` / `parseAmountInputToPaise` rules for client-side gating. */
 const MAX_RUPEES_PER_EXPENSE = 1e12;
@@ -25,7 +23,7 @@ function getMaxExpenseDateIso() {
 }
 
 /** Field errors for submit + disabled button (kept in sync with API validation). */
-function getSubmitErrors(fields) {
+function getSubmitErrors(fields, { categories = [] } = {}) {
   const nextErrors = {};
   const amountStr = String(fields.amount ?? '').trim();
 
@@ -63,12 +61,16 @@ function getSubmitErrors(fields) {
     nextErrors.description = 'Description is required';
   }
 
+  if (categories.length > 0 && !categories.includes(fields.category)) {
+    nextErrors.category = 'Pick a category';
+  }
+
   return nextErrors;
 }
 
-const empty = () => ({
+const empty = (defaultCategory) => ({
   amount: '',
-  category: CATEGORIES[0],
+  category: defaultCategory,
   description: '',
   date: new Date().toISOString().split('T')[0], // today as YYYY-MM-DD
 });
@@ -86,12 +88,25 @@ const empty = () => ({
  */
 const initialTouched = () => ({ amount: false, date: false, description: false });
 
-export function ExpenseForm({ onSubmit, submitting }) {
-  const [fields, setFields] = useState(empty);
+export function ExpenseForm({ categories = [], onSubmit, submitting }) {
+  const [fields, setFields] = useState(() => empty(''));
   const [touched, setTouched] = useState(initialTouched);
 
-  const submitErrors = useMemo(() => getSubmitErrors(fields), [fields]);
-  const submitBlocked = Object.keys(submitErrors).length > 0;
+  const defaultCategory = categories[0] ?? '';
+
+  useEffect(() => {
+    if (!categories.length) return;
+    setFields((f) => ({
+      ...f,
+      category: categories.includes(f.category) ? f.category : defaultCategory,
+    }));
+  }, [categories, defaultCategory]);
+
+  const submitErrors = useMemo(
+    () => getSubmitErrors(fields, { categories }),
+    [fields, categories]
+  );
+  const submitBlocked = Object.keys(submitErrors).length > 0 || !categories.length;
 
   const showErrors = useMemo(
     () => ({
@@ -116,7 +131,7 @@ export function ExpenseForm({ onSubmit, submitting }) {
 
     const result = await onSubmit(fields);
     if (result?.ok) {
-      setFields(empty());
+      setFields(empty(defaultCategory));
       setTouched(initialTouched());
     }
   }
@@ -179,9 +194,13 @@ export function ExpenseForm({ onSubmit, submitting }) {
           onChange={(e) => set('category', e.target.value)}
           className={`${filterSelectClassName} w-full`}
           style={FILTER_SELECT_STYLE}
+          disabled={!categories.length}
         >
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
+          {!categories.length ? <option value="">Loading categories…</option> : null}
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
           ))}
         </select>
       </div>

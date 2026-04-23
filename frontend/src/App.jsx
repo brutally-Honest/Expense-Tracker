@@ -13,12 +13,19 @@ import { ExpenseSummary } from './components/ExpenseSummary';
  *
  * Layout:
  *   [header]
- *   [ExpenseForm]          ← left col on desktop
- *   [FilterBar + Table]    ← right col on desktop
- *   [ExpenseSummary]
+ *   [ExpenseForm]   ← left col on desktop
+ *   [Summary card]  [List card: Filter + table + list subtotal]  ← right, stacked
  */
 export default function App() {
-  const { state, total, submitExpense, setFilter } = useExpenses();
+  const {
+    state,
+    total,
+    categories,
+    summaryByCategory,
+    metaLoading,
+    submitExpense,
+    setFilter,
+  } = useExpenses();
   const { expenses, filters, ui } = state;
   const online = useOnline();
 
@@ -43,21 +50,69 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[360px_1fr] gap-6 items-start">
         {/* Left: form */}
         <div>
-          <ExpenseForm onSubmit={submitExpense} submitting={ui.submitting} />
+          <ExpenseForm
+            categories={categories}
+            onSubmit={submitExpense}
+            submitting={ui.submitting}
+          />
         </div>
 
-        {/* Right: list */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">
-              Expenses
-            </h2>
-            <FilterBar filters={filters} onFilterChange={setFilter} />
-          </div>
+        {/* Right: summary (top) + list (bottom), separate cards */}
+        <div className="space-y-6">
+          <section
+            className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm"
+            aria-labelledby="summary-heading"
+          >
+            <ExpenseSummary
+              byCategory={summaryByCategory}
+              summaryLoading={metaLoading}
+              categories={categories}
+            />
+          </section>
 
-          <ExpenseTable expenses={expenses} loading={ui.loading} />
+          <section
+            className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-4"
+            aria-labelledby="expenses-heading"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2
+                id="expenses-heading"
+                className="text-sm font-semibold text-gray-500 uppercase tracking-widest"
+              >
+                Expenses
+              </h2>
+              <FilterBar
+                categories={categories}
+                filters={filters}
+                onFilterChange={setFilter}
+              />
+            </div>
 
-          <ExpenseSummary total={total} count={expenses.length} />
+            <ExpenseTable
+              expenses={expenses}
+              loading={ui.loading}
+              categories={categories}
+            />
+
+            <div className="pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-500 mb-1">Current list (filters applied)</p>
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm text-gray-600">
+                  {expenses.length} {expenses.length === 1 ? 'entry' : 'entries'}
+                </span>
+                <div>
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider mr-2">Total</span>
+                  <span className="text-lg font-semibold text-gray-900 font-mono">
+                    ₹
+                    {total.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
