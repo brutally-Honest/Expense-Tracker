@@ -35,20 +35,21 @@ function safeStorageRemove(key) {
  *
  * Responsibilities:
  * 1. Fetch expenses (on mount + whenever filters change)
- * 2. Submit new expenses with optimistic update + rollback on failure
- * 3. Replay any pending drafts from localStorage (handles page-refresh mid-submit)
+ * 2. Submit expenses: persist draft → POST → on success clear draft and refetch (list is server-authoritative)
+ * 3. Replay pending draft from localStorage after refresh; on `online`, refetch + retry draft (assignment: unreliable network / retries)
  * 4. Expose state + actions to components
- *
- * Components just call { submit, setFilter } and read { state }.
- * They know nothing about fetch logic or error recovery.
  */
 export function useExpenses() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [categories, setCategories] = useState([]);
   const [summaryByCategory, setSummaryByCategory] = useState([]);
   const [metaLoading, setMetaLoading] = useState(true);
+  const [hasPendingDraft, setHasPendingDraft] = useState(() => !!safeStorageGet(DRAFT_KEY));
 
-  // Tracks whether we've replayed drafts — only do it once on mount
+  const filtersRef = useRef(state.filters);
+  filtersRef.current = state.filters;
+
+  // Avoid duplicate mount replay (e.g. React StrictMode double-invoke)
   const draftReplayed = useRef(false);
   const isFirstMetaFetch = useRef(true);
 
@@ -93,67 +94,78 @@ export function useExpenses() {
     fetchCategoriesAndSummary();
   }, [fetchCategoriesAndSummary]);
 
-  // ── Draft queue (offline / refresh resilience) ───────────────────────────
+  // ── Draft queue (refresh + reconnect; assignment: retries / unreliable network) ──
 
-  /**
-   * If the user submitted an expense but the page refreshed before the
-   * response arrived, the draft sits in localStorage. On mount, we replay it.
-   *
-   * Analogy: like a "send queue" in an email client.
-   */
-  useEffect(() => {
-    if (draftReplayed.current) return;
-    draftReplayed.current = true;
-
+  const replayPendingDraft = useCallback(async () => {
     const raw = safeStorageGet(DRAFT_KEY);
-    if (!raw) return;
+    if (!raw) {
+      setHasPendingDraft(false);
+      return;
+    }
 
     let draft;
     try {
       draft = JSON.parse(raw);
     } catch {
       safeStorageRemove(DRAFT_KEY);
+      setHasPendingDraft(false);
+      toast.error('Could not read saved expense. Discarded invalid draft.');
       return;
     }
 
-    // Replay silently — the server's idempotency window handles duplicates
-    api
-      .createExpense(draft)
-      .then(({ data }) => {
-        dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
-        safeStorageRemove(DRAFT_KEY);
-        fetchExpenses(state.filters);
-        fetchCategoriesAndSummary();
-      })
-      .catch(() => {
-        // If replay fails, remove draft to avoid infinite retry loop
-        safeStorageRemove(DRAFT_KEY);
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setHasPendingDraft(true);
+
+    try {
+      const { data } = await api.createExpense(draft);
+      dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
+      safeStorageRemove(DRAFT_KEY);
+      setHasPendingDraft(false);
+      toast.success('Queued expense saved');
+      await fetchExpenses(filtersRef.current);
+      await fetchCategoriesAndSummary();
+    } catch (err) {
+      const msg = err?.message || 'Could not save queued expense';
+      toast.error(msg);
+      // Keep draft for next load or `online` retry (no silent drop)
+    }
+  }, [fetchExpenses, fetchCategoriesAndSummary]);
+
+  useEffect(() => {
+    if (draftReplayed.current) return;
+    draftReplayed.current = true;
+    void replayPendingDraft();
+  }, [replayPendingDraft]);
+
+  useEffect(() => {
+    function handleOnline() {
+      void fetchExpenses(filtersRef.current);
+      void fetchCategoriesAndSummary();
+      void replayPendingDraft();
+    }
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [fetchExpenses, fetchCategoriesAndSummary, replayPendingDraft]);
 
   // ── Submit ───────────────────────────────────────────────────────────────
 
   /**
-   * Submit a new expense.
-   * 1. Save draft to localStorage (survives refresh)
-   * 2. Optimistically prepend to list
-   * 3. POST to API
-   * 4a. On success: remove draft, re-fetch for authoritative state
-   * 4b. On failure: rollback optimistic update, show error
+   * Submit a new expense: write draft (survives refresh), POST, then clear draft + refetch on success.
+   * On failure the draft stays so refresh/`online` can retry (server idempotency covers duplicates).
    */
   const submitExpense = useCallback(
     async (formData) => {
       dispatch({ type: 'SUBMIT_START' });
       safeStorageSet(DRAFT_KEY, JSON.stringify(formData));
+      setHasPendingDraft(true);
 
       try {
         const { data } = await api.createExpense(formData);
         safeStorageRemove(DRAFT_KEY);
+        setHasPendingDraft(false);
         dispatch({ type: 'SUBMIT_SUCCESS', payload: data });
         toast.success('Expense saved');
-        // Re-fetch to get server-authoritative list (correct order, no dups)
-        fetchExpenses(state.filters);
-        fetchCategoriesAndSummary();
+        await fetchExpenses(state.filters);
+        await fetchCategoriesAndSummary();
         return { ok: true };
       } catch (err) {
         dispatch({ type: 'SUBMIT_ERROR', payload: err.message });
@@ -184,6 +196,7 @@ export function useExpenses() {
     categories,
     summaryByCategory,
     metaLoading,
+    hasPendingDraft,
     submitExpense,
     setFilter,
   };

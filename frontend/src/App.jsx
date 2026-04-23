@@ -23,6 +23,7 @@ export default function App() {
     categories,
     summaryByCategory,
     metaLoading,
+    hasPendingDraft,
     submitExpense,
     setFilter,
   } = useExpenses();
@@ -39,8 +40,11 @@ export default function App() {
             <p className="text-xs text-gray-400">Personal finance, simplified</p>
           </div>
           {!online && (
-            <span className="text-xs bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-full px-3 py-1 font-medium">
-              Offline — changes will sync on reconnect
+            <span className="text-xs bg-yellow-100 text-yellow-700 border border-yellow-300 rounded-full px-3 py-1 font-medium max-w-[20rem] text-right leading-snug">
+              Offline — cannot reach the server.
+              {hasPendingDraft
+                ? ' Unsent expense will retry when you are back online.'
+                : ' List and totals refresh when you are back online.'}
             </span>
           )}
         </div>
