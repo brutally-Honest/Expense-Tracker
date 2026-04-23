@@ -36,8 +36,15 @@ export function ExpenseTable({ expenses, loading }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="relative overflow-x-auto">
+      {loading ? (
+        <div className="absolute inset-0 z-10 flex items-start justify-end pt-1 pr-1 pointer-events-none">
+          <span className="text-xs font-medium text-gray-500 bg-white/90 border border-gray-200 rounded px-2 py-1 shadow-sm">
+            Refreshing…
+          </span>
+        </div>
+      ) : null}
+      <table className={`w-full text-sm ${loading ? 'opacity-60' : ''}`}>
         <thead>
           <tr className="border-b border-gray-200 text-left">
             <th className="pb-2 font-medium text-gray-500 text-xs uppercase tracking-wider">Date</th>

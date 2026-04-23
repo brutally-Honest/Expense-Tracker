@@ -124,10 +124,15 @@ export function useExpenses() {
     0
   );
 
+  const clearError = useCallback(() => {
+    dispatch({ type: 'CLEAR_ERROR' });
+  }, []);
+
   return {
     state,
     total,
     submitExpense,
     setFilter,
+    clearError,
   };
 }
