@@ -76,6 +76,37 @@ const inMemoryRepository = {
 
     return results;
   },
+
+  /**
+   * Aggregate all expenses by category: total amount (paise) and count per category.
+   * @returns {Array<{ category: string, amountPaise: number, count: number }>}
+   */
+  summaryByCategory() {
+    const map = new Map();
+    for (const e of store.values()) {
+      const prev = map.get(e.category) || { amountPaise: 0, count: 0 };
+      prev.amountPaise += e.amountPaise;
+      prev.count += 1;
+      map.set(e.category, prev);
+    }
+    return Array.from(map.entries())
+      .map(([category, agg]) => ({
+        category,
+        amountPaise: agg.amountPaise,
+        count: agg.count,
+      }))
+      .sort((a, b) => {
+        if (b.amountPaise !== a.amountPaise) return b.amountPaise - a.amountPaise;
+        return a.category.localeCompare(b.category);
+      });
+  },
 };
 
-module.exports = inMemoryRepository;
+/** Clears all data. Used by tests only (`jest` sets `NODE_ENV=test`). */
+function resetForTests() {
+  if (process.env.NODE_ENV !== 'test') return;
+  store.clear();
+  hashIndex.clear();
+}
+
+module.exports = { ...inMemoryRepository, resetForTests };

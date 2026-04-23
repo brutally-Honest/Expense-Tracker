@@ -54,6 +54,16 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  /** @returns {Promise<{ data: string[] }>} */
+  getCategories() {
+    return request('/categories');
+  },
+
+  /** @returns {Promise<{ data: { category: string, count: number, amount: string }[] }>} */
+  getExpensesSummary() {
+    return request('/expenses/summary');
+  },
+
   /**
    * @param {{ category?: string, sort?: string }} params
    */

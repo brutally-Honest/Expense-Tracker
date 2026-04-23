@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+const categoriesRouter = require('./routes/categories');
 const expensesRouter = require('./routes/expenses');
 const { globalErrorHandler } = require('./middleware/errorHandler');
 
@@ -33,6 +34,7 @@ app.use(
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/categories', categoriesRouter);
 app.use('/api/expenses', expensesRouter);
 app.use((_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } });

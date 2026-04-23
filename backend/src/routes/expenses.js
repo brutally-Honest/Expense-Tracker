@@ -2,6 +2,7 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const { randomUUID } = require('crypto');
 
+const { isAllowedCategoryNormalized } = require('../config/expenseCategories');
 const repo = require('../repository/inMemoryRepository');
 const { buildContentHash } = require('../utils/hash');
 const { handleValidationErrors } = require('../middleware/errorHandler');
@@ -30,7 +31,17 @@ const createExpenseRules = [
     .trim()
     .notEmpty()
     .withMessage('Category is required')
-    .isLength({ max: 100 }),
+    .isLength({ max: 100 })
+    .custom((value) => {
+      const normalized = normalizeCategory(value);
+      if (!normalized) {
+        throw new Error('Category is required');
+      }
+      if (!isAllowedCategoryNormalized(normalized)) {
+        throw new Error('Category must be one of the values from GET /api/categories');
+      }
+      return true;
+    }),
   body('description')
     .trim()
     .notEmpty()
@@ -94,6 +105,21 @@ router.post('/', createExpenseRules, handleValidationErrors, (req, res) => {
   }
 
   return res.status(201).json({ data: formatExpense(resolved), idempotent: false });
+});
+
+/**
+ * GET /api/expenses/summary
+ *
+ * Returns totals per category (all expenses, not affected by list filters).
+ */
+router.get('/summary', (_req, res) => {
+  const rows = repo.summaryByCategory();
+  const data = rows.map((row) => ({
+    category: row.category,
+    count: row.count,
+    amount: (row.amountPaise / 100).toFixed(2),
+  }));
+  return res.json({ data });
 });
 
 /**

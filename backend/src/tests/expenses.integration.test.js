@@ -62,6 +62,14 @@ describe('POST /api/expenses', () => {
       .send({ ...validExpense, date: '2023-02-29' });
     expect(res.status).toBe(422);
   });
+
+  it('returns 422 for category not in GET /api/categories', async () => {
+    const res = await request(app)
+      .post('/api/expenses')
+      .send({ ...validExpense, category: 'BogusCategory' });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
 });
 
 describe('GET /api/expenses', () => {
@@ -109,5 +117,56 @@ describe('GET /api/expenses', () => {
     await seed();
     const res = await request(app).get('/api/expenses').query({ sort: 'date_asc' });
     expect(res.body.data.map((e) => e.date)).toEqual(['2024-01-05', '2024-01-10', '2024-02-01']);
+  });
+});
+
+describe('GET /api/categories', () => {
+  it('returns the canonical category list', async () => {
+    const res = await request(app).get('/api/categories');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toContain('Food');
+    expect(res.body.data).toContain('Other');
+  });
+});
+
+describe('GET /api/expenses/summary', () => {
+  beforeEach(() => {
+    repo.resetForTests();
+  });
+
+  it('returns an empty list when there are no expenses', async () => {
+    const res = await request(app).get('/api/expenses/summary');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('returns totals and counts per category', async () => {
+    await request(app).post('/api/expenses').send({
+      amount: '10',
+      category: 'Food',
+      description: 'A',
+      date: '2024-01-10',
+    });
+    await request(app).post('/api/expenses').send({
+      amount: '20.50',
+      category: 'Transport',
+      description: 'B',
+      date: '2024-02-01',
+    });
+    await request(app).post('/api/expenses').send({
+      amount: '30',
+      category: 'Food',
+      description: 'C',
+      date: '2024-01-05',
+    });
+
+    const res = await request(app).get('/api/expenses/summary');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    const food = res.body.data.find((r) => r.category === 'Food');
+    const transport = res.body.data.find((r) => r.category === 'Transport');
+    expect(food).toMatchObject({ count: 2, amount: '40.00' });
+    expect(transport).toMatchObject({ count: 1, amount: '20.50' });
   });
 });
