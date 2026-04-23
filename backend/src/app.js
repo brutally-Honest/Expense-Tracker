@@ -39,9 +39,10 @@ app.use((_req, res) => {
 });
 app.use(globalErrorHandler);
 
-
-app.listen(PORT, () => {
-  console.log(`[server] running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[server] running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+  });
+}
 
 module.exports = app;
